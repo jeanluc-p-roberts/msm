@@ -1,0 +1,23 @@
+{
+  "name": "minecraftservermaintainer",
+  "version": "0.0.1",
+  "description": "Maintain Minecraft servers",
+  "main": "msm.js",
+  "bin": {
+    "msm": "bin.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Jean-Luc Roberts",
+  "license": "BSD-2-Clause",
+  "dependencies": {
+    "rcon": "git+https://github.com/tehbeard/node-rcon.git",
+    "ws": "^2.2.1",
+    "xmldom": "^0.1.27"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^3.0.0",
+    "utf-8-validate": "^3.0.1"
+  }
+}
