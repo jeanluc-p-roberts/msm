@@ -15,6 +15,13 @@ function getConfigPath(fileName){
 	else return installConfigDir + f;
 }
 
+var rconPortStart = 25665;
+var rconPortEnd = 25765;
+var serverPortStart = 25565;
+var serverPortEnd = 25665;
+var rconPorts = {};
+var serverPorts = {};
+
 var settingsDefaults = fs.readFileSync(getConfigPath("server_defaults.json"));
 settingsDefaults = JSON.parse(settingsDefaults);
 
@@ -22,9 +29,12 @@ class MinecraftServer{
 	constructor(serverName){
 		this.serverName = serverName;
 		this.path = "servers/" + this.serverName;
-		this.settings = {};
-		
-		this.settings = Object.assign({}, settingsDefaults)
+		this.settings = Object.assign({}, settingsDefaults);
+		this.settings["rcon.port"] = undefined;
+		this.settings["server-port"] = undefined;
+		this.settings["query.port"] = undefined;
+		//Needs to go here because readSettingsFile calls setProperty which calls this.rcon.isOnline
+		this.rcon = new RCon();
 		
 		try{
 			fs.accessSync(this.path + "/server.jar");
@@ -35,8 +45,30 @@ class MinecraftServer{
 		}
 		
 		this.process = null;
-		this.rcon = new RCon();
 		this.rconConnect(null);
+	}
+	
+	setToUnusedServerPort(){
+		var i = 0;
+		for(i = serverPortStart; i < serverPortEnd; i++){
+			if(serverPorts[i]) continue;
+			break;
+		}
+		if(i == serverPortEnd) throw new Error("No open server port!");
+		this.settings["server-port"] = i;
+		this.settings["query.port"] = i;
+		serverPorts[i] = true;
+	}
+	
+	setToUnusedRconPort(){
+		var i = 0;
+		for(i = rconPortStart; i < rconPortEnd; i++){
+			if(rconPorts[i]) continue;
+			break;
+		}
+		if(i == rconPortEnd) throw new Error("No open RCon port!");
+		this.settings["rcon.port"] = i;
+		rconPorts[i] = true;
 	}
 	
 	rconConnect(callback){
@@ -83,13 +115,30 @@ class MinecraftServer{
 		fs.symlinkSync(jarPath, this.path + "/server.jar");
 		this.jarFile = jarPath;
 		fs.writeFileSync(this.path + "/eula.txt", "eula=true\n");
+		this.setToUnusedRconPort();
+		this.setToUnusedServerPort();
 		this.generateSettingsFile();
 	}
 	
 	setProperty(key, value){
+		if((key == "rcon.port" || key == "rcon.password" || key == "server-port") && this.rcon.isOnline()){
+			throw new Error("Cannot modify port or RCon password while server is running!");
+		}
+		if(key == "rcon.port" && rconPorts[value]){
+			throw new Error("RCon port already in use!");
+		} else if(key == "server-port" && serverPorts[value]){
+			throw new Error("Server port already in use!");
+		}
 		if(value == "true") value = true;
 		else if(value == "false") value = false;
 		else if(!isNaN(value) && value != "") value = parseInt(value);
+		if(key == "rcon.port"){
+			if(this.settings[key] != undefined) rconPorts[this.settings[key]] = false;
+			rconPorts[value] = true;
+		} else if(key == "server-port"){
+			if(this.settings[key] != undefined) serverPorts[this.settings[key]] = false;
+			serverPorts[value] = true;
+		}
 		this.settings[key] = value;
 	}
 	

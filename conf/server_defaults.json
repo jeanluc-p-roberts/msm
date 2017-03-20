@@ -26,7 +26,7 @@
 	"pvp": true,
 	"query.port": 25565,
 	"rcon.password": "a1234",
-	"rcon.port": 25575,
+	"rcon.port": 25665,
 	"resource-pack": "",
 	"resource-pack-sha1": "",
 	"server-ip": "",
