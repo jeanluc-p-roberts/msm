@@ -13,7 +13,6 @@ class MinecraftServer{
 	constructor(serverName){
 		this.serverName = serverName;
 		this.path = "servers/" + this.serverName;
-		this.running = false;
 		this.settings = {};
 		
 		this.settings = Object.assign({}, settingsDefaults)
@@ -23,7 +22,6 @@ class MinecraftServer{
 			this.jarFile = fs.readlinkSync(this.path + "/server.jar");
 			this.readSettingsFile();
 		} catch(err){
-			//console.error(err);
 			this.jarFile = "";
 		}
 		
@@ -33,13 +31,10 @@ class MinecraftServer{
 	}
 	
 	rconConnect(callback){
-		//console.log("attempting to connect to " + this.serverName);
 		this.rcon.connect(this.settings["server-ip"] || "localhost", this.settings["rcon.port"], this.settings["rcon.password"], this.rconConnectResp.bind(this, callback));
 	}
 	
 	rconConnectResp(callback, err, response){
-		if(err) this.running = false;
-		this.running = this.rcon.isOnline();
 		if(callback) callback(this.copyToJSONify(), null);
 	}
 	
@@ -50,6 +45,7 @@ class MinecraftServer{
 		});
 		var ms = this;
 		reader.on('line', (line) => {
+			if(line.startsWith('#')) return;
 			var firstEnd = line.indexOf('=');
 			var settingKey = line.substring(0, firstEnd);
 			var settingValue = "";
@@ -93,7 +89,6 @@ class MinecraftServer{
 		this.process = spawn("java", ["-Xmx1024M", "-Xms1024M", "-jar", this.jarFile, "nogui"], {
 			cwd: this.path,
 			env: process.env,
-			//stdio: [null, process.stdout, process.stderr]
 			stdio: "ignore",
 			detached: true
 		});
@@ -101,28 +96,26 @@ class MinecraftServer{
 		this.process.unref();
 		
 		this.process.on('exit', (code, signal) => {
-			//console.log("child exited: " + code + " " + signal);
-			this.running = false;
+			
 		});
 		setTimeout(this.rconConnect.bind(this, callback), 60000);
 	}
 	
 	stop(){
-		if(!this.running || !this.rcon.isOnline()) throw new Error(this.serverName + " is not running");
+		if(!this.rcon.isOnline()) throw new Error(this.serverName + " is not running");
 		this.rcon.sendCommand("stop");
-		this.running = false;
+		this.rcon.end();
 		return this.copyToJSONify();
 	}
 	
 	listSettings(){
-		//console.log(this.settings);
 		return this.settings;
 	}
 	
 	copyToJSONify(){
 		var temp = {};
 		temp.serverName = this.serverName;
-		temp.running = this.running;
+		temp.running = this.rcon.isOnline();
 		temp.path = this.path;
 		temp.jarFile = this.jarFile;
 		temp.settings = this.settings;
@@ -167,13 +160,13 @@ class MSMServer{
 		if(command != "init" && command != "list" && !this.serverExists(args[0])) throw new Error("Server does not exist");
 		var error = "", output = null;
 		if(command == "list"){
-			var temp = {};
+			//var temp = {};
+			output = {}
 			for(var prop in this.serverlist){
 				if(!this.serverlist.hasOwnProperty(prop)) continue;
-				temp[prop] = this.serverlist[prop].copyToJSONify();
+				output[prop] = this.serverlist[prop].copyToJSONify();
 			}
-			//output = JSON.stringify(temp);
-			output = temp;
+			//output = temp;
 		} else if(command == "init"){
 			if(args.length != 2) error = "Invalid syntax: init servername version";
 			else output = this.initServer(args[0], args[1]);
