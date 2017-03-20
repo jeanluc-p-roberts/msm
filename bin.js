@@ -18,6 +18,11 @@ app.get('/', (req, res) => {
 //Set up websocket
 const server = http.createServer(app);
 const wss = new WebSocket.Server({server});
+
+function messageWS(ws){
+	
+}
+
 wss.on('connection', (ws) => {
 	ws.on('message', (message) => {
 		//ws.send('Received: ' + message);
@@ -25,7 +30,7 @@ wss.on('connection', (ws) => {
 		if(args[0] == "exit"){
 			process.exit(0);
 		} else{
-			var toSend = { status: null, msg: null };
+			/*var toSend = { status: null, msg: null };
 			try{
 				toSend.msg = msmserver.executeCommand(args[0], args.slice(1));
 				toSend.status = "ok";
@@ -33,7 +38,18 @@ wss.on('connection', (ws) => {
 				toSend.msg = err.message;
 				toSend.status = "err";
 			}
-			ws.send(JSON.stringify(toSend));
+			ws.send(JSON.stringify(toSend));*/
+			msmserver.executeCommand(args[0], args.slice(1), (output, err) => {
+				var toSend = { status: null, msg: null };
+				if(err){
+					toSend.status = "err";
+					toSend.msg = err;
+				} else if(output){
+					toSend.status = "ok";
+					toSend.msg = output;
+				} else return;
+				ws.send(JSON.stringify(toSend));
+			});
 		}
 	});
 });
@@ -52,13 +68,18 @@ rl.on('line', (input) => {
 		rl.close();
 		process.exit(0);
 	} else{
-		try{
+		/*try{
 			var msg = msmserver.executeCommand(args[0], args.slice(1));
 			console.log(msg);
 		} catch(err){
 			console.log(err.message);
-		}
+		}*/
+		msmserver.executeCommand(args[0], args.slice(1), (output, err) => {
+			if(err) console.log(err);
+			else console.log(output);
+			rl.prompt();
+		});
 	}
-	rl.prompt();
+	//rl.prompt();
 });
 rl.prompt();

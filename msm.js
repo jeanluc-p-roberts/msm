@@ -29,17 +29,18 @@ class MinecraftServer{
 		
 		this.process = null;
 		this.rcon = new RCon();
-		this.rconConnect();
+		this.rconConnect(null);
 	}
 	
-	rconConnect(){
-		console.log("attempting to connect to " + this.serverName);
-		this.rcon.connect(this.settings["server-ip"] || "localhost", this.settings["rcon.port"], this.settings["rcon.password"], this.rconConnectResp.bind(this));
+	rconConnect(callback){
+		//console.log("attempting to connect to " + this.serverName);
+		this.rcon.connect(this.settings["server-ip"] || "localhost", this.settings["rcon.port"], this.settings["rcon.password"], this.rconConnectResp.bind(this, callback));
 	}
 	
-	rconConnectResp(err, response){
+	rconConnectResp(callback, err, response){
 		if(err) this.running = false;
 		this.running = this.rcon.isOnline();
+		if(callback) callback(this.copyToJSONify(), null);
 	}
 	
 	readSettingsFile(){
@@ -59,8 +60,6 @@ class MinecraftServer{
 	}
 	
 	generateSettingsFile(){
-		//if(fs.existsSync(this.path + "/server.properties"))
-		//	fs.unlinkSync(this.path + "/server.properties");
 		const file = fs.createWriteStream(this.path + "/server.properties");
 		for(var prop in this.settings){
 			if(this.settings.hasOwnProperty(prop)){
@@ -70,7 +69,6 @@ class MinecraftServer{
 	}
 	
 	initialize(version){
-		//var p = "servers/" + this.serverName;
 		var jarPath = path.resolve("./jar_files/" + version + ".jar");
 		if(!fs.existsSync(jarPath)) throw new Error("No such version!");
 		if(fs.existsSync(this.path)){
@@ -90,7 +88,7 @@ class MinecraftServer{
 		this.settings[key] = value;
 	}
 	
-	start(){
+	start(callback){
 		if(this.running) throw new Error(this.serverName + " is already running");
 		this.process = spawn("java", ["-Xmx1024M", "-Xms1024M", "-jar", this.jarFile, "nogui"], {
 			cwd: this.path,
@@ -106,9 +104,7 @@ class MinecraftServer{
 			//console.log("child exited: " + code + " " + signal);
 			this.running = false;
 		});
-		//this.running = true;
-		//this.rconConnect();
-		setTimeout(this.rconConnect.bind(this), 60000);
+		setTimeout(this.rconConnect.bind(this, callback), 60000);
 	}
 	
 	stop(){
@@ -119,7 +115,8 @@ class MinecraftServer{
 	}
 	
 	listSettings(){
-		console.log(this.settings);
+		//console.log(this.settings);
+		return this.settings;
 	}
 	
 	copyToJSONify(){
@@ -161,36 +158,28 @@ class MSMServer{
 		return server.copyToJSONify();
 	}
 	
-	start(serverName){
-		if(this.serverlist[serverName]){
-			this.serverlist[serverName].start();
-		} else{
-			throw new Error(serverName + " does not exist!")
-		}
-	}
-	
 	serverExists(serverName){
 		//short circuit to check if a server is undefined or null
 		return this.serverlist[serverName] && true;
 	}
 	
-	executeCommand(command, args){
+	_executeCommandLower(command, args, callback){
 		if(command != "init" && command != "list" && !this.serverExists(args[0])) throw new Error("Server does not exist");
-		var error = "", output = "ok";
+		var error = "", output = null;
 		if(command == "list"){
-			//console.log(this.serverlist);
 			var temp = {};
 			for(var prop in this.serverlist){
 				if(!this.serverlist.hasOwnProperty(prop)) continue;
 				temp[prop] = this.serverlist[prop].copyToJSONify();
 			}
-			output = JSON.stringify(temp);
+			//output = JSON.stringify(temp);
+			output = temp;
 		} else if(command == "init"){
 			if(args.length != 2) error = "Invalid syntax: init servername version";
 			else output = this.initServer(args[0], args[1]);
 		} else if(command == "start"){
 			if(args.length != 1) error = "Invalid syntax: start servername";
-			else this.start(args[0]);
+			else this.serverlist[args[0]].start(callback);
 		} else if(command == "listsettings"){
 			if(args.length != 1) error = "Invalid syntax: listsettings servername";
 			else this.serverlist[args[0]].listSettings();
@@ -212,6 +201,15 @@ class MSMServer{
 		} else error = "Unknown command: " + command;
 		if(error != "") throw new Error(error);
 		return output;
+	}
+	
+	executeCommand(command, args, callback){
+		try{
+			var output = this._executeCommandLower(command, args, callback);
+			if(callback && output) callback(output, null);
+		} catch(err){
+			if(callback) callback(null, err.message);
+		}
 	}
 }
 
