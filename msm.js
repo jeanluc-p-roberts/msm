@@ -17,7 +17,6 @@ function getConfigPath(fileName){
 
 var settingsDefaults = fs.readFileSync(getConfigPath("server_defaults.json"));
 settingsDefaults = JSON.parse(settingsDefaults);
-console.log(settingsDefaults);
 
 class MinecraftServer{
 	constructor(serverName){
@@ -192,7 +191,7 @@ class MSMServer{
 			else this.serverlist[args[0]].listSettings();
 		} else if(command == "getversion"){
 			if(args.length != 1) error = "Invalid syntax: getversion version";
-			else getVersion(args[0]);
+			else getVersion(args[0], callback);
 		} else if(command == "stop"){
 			if(args.length != 1) error = "Invalid syntax: stop servername";
 			else output = this.serverlist[args[0]].stop();
@@ -220,18 +219,23 @@ class MSMServer{
 	}
 }
 
-function getVersionJar(url, version){
+function getVersionJar(url, version, callback){
 	var file = fs.createWriteStream("./jar_files/" + version + ".jar");
 	https.get(url, (resp) => {
 		resp.pipe(file);
-		file.on('finish', () => file.close(() => console.log("Version " + version + " downloaded")));
+		//file.on('finish', () => file.close(() => console.log("Version " + version + " downloaded")));
+		file.on('finish', () => {
+			file.close(() => {
+				callback("Version " + version + " downloaded", null);
+			});
+		});
 	}).on('error', (err) => {
 		fs.unlink("./jar_files/" + version + ".jar");
-		throw new Error(err);
+		callback(null, err);
 	});
 }
 
-function getVersion(version){
+function getVersion(version, callback){
 	var versionPage = "";
 	https.get('https://mcversions.net/', (resp) => {
 		const statusCode = resp.statusCode;
@@ -256,7 +260,7 @@ function getVersion(version){
 						break;
 					}
 				}
-				getVersionJar(serverNode.getAttribute("href"), version);
+				getVersionJar(serverNode.getAttribute("href"), version, callback);
 			} else throw new Error("Unknown version " + version);
 		});
 	});
