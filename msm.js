@@ -121,6 +121,16 @@ class MinecraftServer{
 	listSettings(){
 		console.log(this.settings);
 	}
+	
+	copyToJSONify(){
+		var temp = {};
+		temp.serverName = this.serverName;
+		temp.running = this.running;
+		temp.path = this.path;
+		temp.jarFile = this.jarFile;
+		temp.settings = this.settings;
+		return temp;
+	}
 }
 
 class MSMServer{
@@ -141,13 +151,14 @@ class MSMServer{
 		var server;
 		if(this.serverlist[serverName] != undefined) server = this.serverlist[serverName];
 		else server = new MinecraftServer(serverName);
-		try{
+		//try{
 			server.initialize(version);
 			this.serverlist[serverName] = server;
-			console.log(serverName + " initialized!");
-		} catch(err){
-			console.error(err);
-		}
+			//console.log(serverName + " initialized!");
+			return serverName + " initialized!";
+		//} catch(err){
+		//	console.error(err);
+		//}
 	}
 	
 	start(serverName){
@@ -164,12 +175,18 @@ class MSMServer{
 	}
 	
 	executeCommand(command, args){
-		var error = "";
+		var error = "", output = "ok";
 		if(command == "list"){
-			console.log(this.serverlist);
+			//console.log(this.serverlist);
+			var temp = {};
+			for(var prop in this.serverlist){
+				if(!this.serverlist.hasOwnProperty(prop)) continue;
+				temp[prop] = this.serverlist[prop].copyToJSONify();
+			}
+			output = JSON.stringify(temp);
 		} else if(command == "init"){
 			if(args.length != 2) error = "Invalid syntax: init servername version";
-			else this.initServer(args[0], args[1]);
+			else output = this.initServer(args[0], args[1]);
 		} else if(command == "start"){
 			if(args.length != 1) error = "Invalid syntax: start servername";
 			else if(!this.serverExists(args[0])) error = "Server does not exist";
@@ -187,6 +204,7 @@ class MSMServer{
 			else this.serverlist[args[0]].stop();
 		} else error = "Unknown command: " + command;
 		if(error != "") throw new Error(error);
+		return output;
 	}
 }
 

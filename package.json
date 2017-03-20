@@ -12,6 +12,7 @@
   "author": "Jean-Luc Roberts",
   "license": "BSD-2-Clause",
   "dependencies": {
+    "express": "^4.15.2",
     "rcon": "git+https://github.com/tehbeard/node-rcon.git",
     "ws": "^2.2.1",
     "xmldom": "^0.1.27"
