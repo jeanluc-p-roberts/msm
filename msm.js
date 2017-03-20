@@ -59,8 +59,8 @@ class MinecraftServer{
 	}
 	
 	generateSettingsFile(){
-		if(fs.existsSync(this.path + "/server.properties"))
-			fs.unlinkSync(this.path + "/server.properties");
+		//if(fs.existsSync(this.path + "/server.properties"))
+		//	fs.unlinkSync(this.path + "/server.properties");
 		const file = fs.createWriteStream(this.path + "/server.properties");
 		for(var prop in this.settings){
 			if(this.settings.hasOwnProperty(prop)){
@@ -115,7 +115,7 @@ class MinecraftServer{
 		if(!this.running || !this.rcon.isOnline()) throw new Error(this.serverName + " is not running");
 		this.rcon.sendCommand("stop");
 		this.running = false;
-		//console.log(this.running);
+		return this.copyToJSONify();
 	}
 	
 	listSettings(){
@@ -130,6 +130,11 @@ class MinecraftServer{
 		temp.jarFile = this.jarFile;
 		temp.settings = this.settings;
 		return temp;
+	}
+	
+	saveProperties(){
+		this.generateSettingsFile();
+		return this.copyToJSONify();
 	}
 }
 
@@ -153,7 +158,7 @@ class MSMServer{
 		else server = new MinecraftServer(serverName);
 		server.initialize(version);
 		this.serverlist[serverName] = server;
-		return serverName + " initialized!";
+		return server.copyToJSONify();
 	}
 	
 	start(serverName){
@@ -170,6 +175,7 @@ class MSMServer{
 	}
 	
 	executeCommand(command, args){
+		if(command != "init" && command != "list" && !this.serverExists(args[0])) throw new Error("Server does not exist");
 		var error = "", output = "ok";
 		if(command == "list"){
 			//console.log(this.serverlist);
@@ -184,19 +190,25 @@ class MSMServer{
 			else output = this.initServer(args[0], args[1]);
 		} else if(command == "start"){
 			if(args.length != 1) error = "Invalid syntax: start servername";
-			else if(!this.serverExists(args[0])) error = "Server does not exist";
 			else this.start(args[0]);
 		} else if(command == "listsettings"){
 			if(args.length != 1) error = "Invalid syntax: listsettings servername";
-			else if(!this.serverExists(args[0])) error = "Server does not exist";
 			else this.serverlist[args[0]].listSettings();
 		} else if(command == "getversion"){
 			if(args.length != 1) error = "Invalid syntax: getversion version";
 			else getVersion(args[0]);
 		} else if(command == "stop"){
 			if(args.length != 1) error = "Invalid syntax: stop servername";
-			else if(!this.serverExists(args[0])) error = "Server does not exist";
-			else this.serverlist[args[0]].stop();
+			else output = this.serverlist[args[0]].stop();
+		} else if(command == "setproperty"){
+			if(args.length != 3) error = "Invalid syntax: stop servername";
+			else{
+				this.serverlist[args[0]].setProperty(args[1], args[2]);
+				output = this.serverlist[args[0]].copyToJSONify();
+			}
+		} else if(command == "saveproperties"){
+			if(args.length != 1) error = "Invalid syntax: listsettings servername";
+			else output = this.serverlist[args[0]].saveProperties();
 		} else error = "Unknown command: " + command;
 		if(error != "") throw new Error(error);
 		return output;
