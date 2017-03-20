@@ -131,6 +131,8 @@ class MSMServer{
 	loadServerList(){
 		var sl = fs.readdirSync("servers");
 		for(var i = 0; i < sl.length; i++){
+			var stats = fs.lstatSync("servers/" + sl[i]);
+			if(!stats.isDirectory()) continue;
 			this.serverlist[sl[i]] = new MinecraftServer(sl[i]);
 		}
 	}
