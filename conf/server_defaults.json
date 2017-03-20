@@ -21,7 +21,7 @@
 	"motd": "A Minecraft Server",
 	"network-compression-threshold": 256,
 	"online-mode": true,
-	"op-permission-level": 1S,
+	"op-permission-level": 1,
 	"player-idle-timeout": 0,
 	"pvp": true,
 	"query.port": 25565,
