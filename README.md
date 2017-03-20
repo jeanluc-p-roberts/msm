@@ -1,0 +1,2 @@
+# msm
+Minecraft Server Maintainer
