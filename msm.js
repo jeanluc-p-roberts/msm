@@ -6,8 +6,18 @@ const https = require('https');
 const DOMParser = require('xmldom').DOMParser;
 const RCon = require('rcon').newHandle;
 
-var settingsDefaults = fs.readFileSync("conf/server_defaults.json");
+var configDir = process.cwd + "/conf";
+var installConfigDir = __dirname + "/conf";
+
+function getConfigPath(fileName){
+	var f = "/" + fileName;
+	if(fs.existsSync(configDir + f)) return configDir + f;
+	else return installConfigDir + f;
+}
+
+var settingsDefaults = fs.readFileSync(getConfigPath("server_defaults.json"));
 settingsDefaults = JSON.parse(settingsDefaults);
+console.log(settingsDefaults);
 
 class MinecraftServer{
 	constructor(serverName){
@@ -131,6 +141,10 @@ class MinecraftServer{
 class MSMServer{
 	constructor(){
 		this.serverlist = {};
+		
+		if(!fs.existsSync("servers")) fs.mkdir("servers");
+		if(!fs.existsSync("conf")) fs.mkdir("conf");
+		if(!fs.existsSync("jar_files")) fs.mkdir("jar_files");
 	}
 	
 	loadServerList(){
@@ -157,7 +171,7 @@ class MSMServer{
 	}
 	
 	_executeCommandLower(command, args, callback){
-		if(command != "init" && command != "list" && !this.serverExists(args[0])) throw new Error("Server does not exist");
+		if(command != "init" && command != "list" && command != "getversion" && !this.serverExists(args[0])) throw new Error("Server does not exist");
 		var error = "", output = null;
 		if(command == "list"){
 			//var temp = {};
