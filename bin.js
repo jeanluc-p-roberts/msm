@@ -25,12 +25,15 @@ wss.on('connection', (ws) => {
 		if(args[0] == "exit"){
 			process.exit(0);
 		} else{
+			var toSend = { status: null, msg: null };
 			try{
-				var msg = msmserver.executeCommand(args[0], args.slice(1));
-				ws.send(msg);
+				toSend.msg = msmserver.executeCommand(args[0], args.slice(1));
+				toSend.status = "ok";
 			} catch(err){
-				ws.send(err.message);
+				toSend.msg = err.message;
+				toSend.status = "err";
 			}
+			ws.send(JSON.stringify(toSend));
 		}
 	});
 });

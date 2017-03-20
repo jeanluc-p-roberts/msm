@@ -151,14 +151,9 @@ class MSMServer{
 		var server;
 		if(this.serverlist[serverName] != undefined) server = this.serverlist[serverName];
 		else server = new MinecraftServer(serverName);
-		//try{
-			server.initialize(version);
-			this.serverlist[serverName] = server;
-			//console.log(serverName + " initialized!");
-			return serverName + " initialized!";
-		//} catch(err){
-		//	console.error(err);
-		//}
+		server.initialize(version);
+		this.serverlist[serverName] = server;
+		return serverName + " initialized!";
 	}
 	
 	start(serverName){
