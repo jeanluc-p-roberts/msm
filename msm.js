@@ -1,90 +1,78 @@
+const EventEmitter = require('events');
 const fs = require('fs');
-const spawn = require('child_process').spawn;
-const path = require('path');
 const readline = require('readline');
-const https = require('https');
-const DOMParser = require('xmldom').DOMParser;
 const RCon = require('rcon').newHandle;
 
-var configDir = process.cwd + "/conf";
-var installConfigDir = __dirname + "/conf";
-
-function getConfigPath(fileName){
-	var f = "/" + fileName;
-	if(fs.existsSync(configDir + f)) return configDir + f;
-	else return installConfigDir + f;
-}
-
-var rconPortStart = 25665;
-var rconPortEnd = 25765;
-var serverPortStart = 25565;
-var serverPortEnd = 25665;
-var rconPorts = {};
-var serverPorts = {};
-
-var settingsDefaults = fs.readFileSync(getConfigPath("server_defaults.json"));
-settingsDefaults = JSON.parse(settingsDefaults);
-
 class MinecraftServer{
-	constructor(serverName){
+	constructor(MSMServer, serverName){
+		this.MSMServer = MSMServer;
 		this.serverName = serverName;
-		this.path = "servers/" + this.serverName;
-		this.settings = Object.assign({}, settingsDefaults);
-		this.settings["rcon.port"] = undefined;
-		this.settings["server-port"] = undefined;
-		this.settings["query.port"] = undefined;
-		//Needs to go here because readSettingsFile calls setProperty which calls this.rcon.isOnline
+		this.path = MSMServer.directories.serverDir + serverName + "/";
+		if(!fs.existsSync(this.path)) fs.mkdir(this.path);
 		this.rcon = new RCon();
-		
-		try{
-			fs.accessSync(this.path + "/server.jar");
-			this.jarFile = fs.readlinkSync(this.path + "/server.jar");
-			this.readSettingsFile();
-		} catch(err){
-			this.jarFile = "";
+		this.settings = {};
+		this.loadSettings();
+		this.jarPath = "";
+	}
+	
+	setServerJar(jarPath){
+		var serverJar = this.path + "server.jar";
+		if(fs.existsSync(serverJar))
+			fs.unlinkSync(serverJar);
+		fs.symlinkSync(jarPath, serverJar);
+	}
+	
+	setEULA(){ fs.writeFileSync(this.path + "eula.txt", "eula=true\n"); }
+	
+	isRunning(){
+		return this.rcon.isOnline();
+	}
+	
+	loadSettings(){
+		if(fs.existsSync(this.path + "server.properties")){
+			this._parseSettingsFile();
+		} else{
+			//Get default settings, new rcon and server ports, and
+			//then save settings
+			this.settings = this.MSMServer._getDefaultSettings();
+			this._checkRconPort();
+			this._checkServerPort();
+			this._saveSettingsFile();
 		}
-		
-		this.process = null;
-		this.rconConnect(null);
 	}
 	
-	setToUnusedServerPort(){
-		var i = 0;
-		for(i = serverPortStart; i < serverPortEnd; i++){
-			if(serverPorts[i]) continue;
-			break;
+	makeJSONCopy(){
+		return {
+			running: this.isRunning(),
+			serverName: this.serverName,
+			settings: this.settings
+		};
+	}
+	
+	setProperty(key, value, bypassRunningCheck, dontEmit){
+		//May change this check in the future to allow these to be modified
+		if(!bypassRunningCheck && (key == "rcon.port" || key == "rcon.password" || key == "query.port" || key == "server-port")){
+			if(!!dontEmit) this.MSMServer.emit('serverproperty', "err", "Cannot modify " + key);
+			return;
 		}
-		if(i == serverPortEnd) throw new Error("No open server port!");
-		this.settings["server-port"] = i;
-		this.settings["query.port"] = i;
-		serverPorts[i] = true;
+		if(bypassRunningCheck || !this.isRunning()){
+			if(value == "true") value = true;
+			else if(value == "false") value = false;
+			else if(!isNaN(value) && value != "") value = parseInt(value);
+			this.settings[key] = value;
+			if(!!dontEmit)
+				this.MSMServer.emit('serverproperty', "ok",
+					{ serverName: this.serverName, key: key, value: value});
+		} else if(!!dontEmit)
+			this.MSMServer.emit('serverproperty', "err", "Cannot modify properties while running");
 	}
 	
-	setToUnusedRconPort(){
-		var i = 0;
-		for(i = rconPortStart; i < rconPortEnd; i++){
-			if(rconPorts[i]) continue;
-			break;
-		}
-		if(i == rconPortEnd) throw new Error("No open RCon port!");
-		this.settings["rcon.port"] = i;
-		rconPorts[i] = true;
-	}
-	
-	rconConnect(callback){
-		this.rcon.connect(this.settings["server-ip"] || "localhost", this.settings["rcon.port"], this.settings["rcon.password"], this.rconConnectResp.bind(this, callback));
-	}
-	
-	rconConnectResp(callback, err, response){
-		if(callback) callback(this.copyToJSONify(), null);
-	}
-	
-	readSettingsFile(){
-		var reader = readline.createInterface({
-			input: fs.createReadStream(this.path + "/server.properties"),
-			console:false
-		});
+	_parseSettingsFile(){
 		var ms = this;
+		var p = this.path + "server.properties";
+		var reader = readline.createInterface({
+			input: fs.createReadStream(p)
+		});
 		reader.on('line', (line) => {
 			if(line.startsWith('#')) return;
 			var firstEnd = line.indexOf('=');
@@ -92,227 +80,160 @@ class MinecraftServer{
 			var settingValue = "";
 			firstEnd++;
 			if(firstEnd != line.length) settingValue = line.substring(firstEnd);
-			ms.setProperty(settingKey, settingValue);
+			ms.setProperty(settingKey, settingValue, true, true);
+		}).on('close', () => {
+			//Check to make sure there are no port conflicts after loading
+			//properties
+			ms._checkRconPort();
+			ms._checkServerPort();
+			ms._saveSettingsFile();
 		});
 	}
 	
-	generateSettingsFile(){
-		const file = fs.createWriteStream(this.path + "/server.properties");
+	_saveSettingsFile(){
+		const file = fs.createWriteStream(this.path + "server.properties");
 		for(var prop in this.settings){
 			if(this.settings.hasOwnProperty(prop)){
 				file.write(prop + "=" + this.settings[prop] + "\n");
 			}
 		}
+		file.end();
 	}
 	
-	initialize(version){
-		var jarPath = path.resolve("./jar_files/" + version + ".jar");
-		if(!fs.existsSync(jarPath)) throw new Error("No such version!");
-		if(fs.existsSync(this.path)){
-			if(fs.existsSync(this.path + "/server.properties")) throw new Error("Already initialized!");
-		} else fs.mkdir(this.path);
-		if(this.jarFile != "") fs.unlinkSync(this.jarFile);
-		fs.symlinkSync(jarPath, this.path + "/server.jar");
-		this.jarFile = jarPath;
-		fs.writeFileSync(this.path + "/eula.txt", "eula=true\n");
-		this.setToUnusedRconPort();
-		this.setToUnusedServerPort();
-		this.generateSettingsFile();
+	_checkRconPort(){
+		if(this.MSMServer._isRconPortUsed(this.settings["rcon.port"]))
+			this.settings["rcon.port"] = this.MSMServer._getFreeRconPort();
+		this.MSMServer._setRconPortUsed(this.settings["rcon.port"]);
 	}
 	
-	setProperty(key, value){
-		if((key == "rcon.port" || key == "rcon.password" || key == "server-port") && this.rcon.isOnline()){
-			throw new Error("Cannot modify port or RCon password while server is running!");
-		}
-		if(key == "rcon.port" && rconPorts[value]){
-			throw new Error("RCon port already in use!");
-		} else if(key == "server-port" && serverPorts[value]){
-			throw new Error("Server port already in use!");
-		}
-		if(value == "true") value = true;
-		else if(value == "false") value = false;
-		else if(!isNaN(value) && value != "") value = parseInt(value);
-		if(key == "rcon.port"){
-			if(this.settings[key] != undefined) rconPorts[this.settings[key]] = false;
-			rconPorts[value] = true;
-		} else if(key == "server-port"){
-			if(this.settings[key] != undefined) serverPorts[this.settings[key]] = false;
-			serverPorts[value] = true;
-		}
-		this.settings[key] = value;
-	}
-	
-	start(callback){
-		if(this.running) throw new Error(this.serverName + " is already running");
-		this.process = spawn("java", ["-Xmx1024M", "-Xms1024M", "-jar", this.jarFile, "nogui"], {
-			cwd: this.path,
-			env: process.env,
-			stdio: "ignore",
-			detached: true
-		});
-		
-		this.process.unref();
-		
-		this.process.on('exit', (code, signal) => {
-			
-		});
-		setTimeout(this.rconConnect.bind(this, callback), 60000);
-	}
-	
-	stop(){
-		if(!this.rcon.isOnline()) throw new Error(this.serverName + " is not running");
-		this.rcon.sendCommand("stop");
-		this.rcon.end();
-		return this.copyToJSONify();
-	}
-	
-	listSettings(){
-		return this.settings;
-	}
-	
-	copyToJSONify(){
-		var temp = {};
-		temp.serverName = this.serverName;
-		temp.running = this.rcon.isOnline();
-		temp.path = this.path;
-		temp.jarFile = this.jarFile;
-		temp.settings = this.settings;
-		return temp;
-	}
-	
-	saveProperties(){
-		this.generateSettingsFile();
-		return this.copyToJSONify();
+	_checkServerPort(){
+		if(this.MSMServer._isServerPortUsed(this.settings["server-port"]))
+			this.settings["server-port"] = this.MSMServer._getFreeServerPort();
+		this.MSMServer._setServerPortUsed(this.settings["server-port"]);
+		this.settings["query.port"] = this.settings["server-port"];
 	}
 }
 
-class MSMServer{
+class MSMServer extends EventEmitter{
 	constructor(){
-		this.serverlist = {};
+		super();
+		this.serverList = {};
+		this.directories = {
+			installConfDir: __dirname + "/conf/",
+			localConfDir: "./conf/",
+			serverDir: "./servers/",
+			jarDir: "./jar_files/"
+		}
 		
-		if(!fs.existsSync("servers")) fs.mkdir("servers");
-		if(!fs.existsSync("conf")) fs.mkdir("conf");
-		if(!fs.existsSync("jar_files")) fs.mkdir("jar_files");
+		this._checkFoldersExist();
+		this._loadDefaultSettings();
+		
+		this.startRconPort = 25665;
+		this.endRconPort = 25765;
+		this.startServerPort = 25565;
+		this.endServerPort = 25665;
+		this.usedRconPorts = {};
+		this.usedServerPorts = {};
+		
+		this._loadExistingServers();
 	}
 	
-	loadServerList(){
-		var sl = fs.readdirSync("servers");
+	/**
+	 * Events
+	 *
+	 * getversion
+	 * serverstart
+	 * serverstop
+	 * serverproperty
+	 * serversave
+	 * serverinit
+	 * serverdelete
+	 */
+	
+	getVersion(){}
+	serverInit(serverName, version){
+		if(this.serverList[serverName])
+			this.emit('serverinit', "err", "Server " + serverName + " already exists!");
+		if(!this._checkVersionExists(version))
+			this.emit('serverinit', "err", "Version " + version + " is not in the system!");
+		var ms = new MinecraftServer(this, serverName);
+		ms.setServerJar(this.jarDir + version + ".jar");
+		ms.setEULA();
+		this.serverList[serverName] = ms;
+		this.emit('serverinit', "ok", ms.makeJSONCopy());
+	}
+	
+	_checkFoldersExist(){
+		if(!fs.existsSync(this.directories.localConfDir))
+			fs.mkdir(this.directories.localConfDir);
+		if(!fs.existsSync(this.directories.serverDir))
+			fs.mkdir(this.directories.serverDir);
+		if(!fs.existsSync(this.directories.jarDir))
+			fs.mkdir(this.directories.jarDir);
+	}
+	
+	_checkVersionExists(version){
+		return fs.existsSync(this.directories.jarDir + version + ".jar");
+	}
+	
+	_getConfigFileName(filename){
+		if(fs.existsSync(this.directories.localConfDir + filename))
+			return this.directories.localConfDir + filename;
+		else return this.directories.installConfDir + filename;
+	}
+	
+	_loadDefaultSettings(){
+		var filename = this._getConfigFileName("server_defaults.json");
+		var settingsContent = fs.readFileSync(filename);
+		this.defaultSettings = JSON.parse(settingsContent);
+	}
+	
+	_getDefaultSettings(){
+		return this.defaultSettings;
+	}
+	
+	_loadExistingServers(){
+		var sl = fs.readdirSync(this.directories.serverDir);
 		for(var i = 0; i < sl.length; i++){
-			var stats = fs.lstatSync("servers/" + sl[i]);
+			var stats = fs.lstatSync(this.directories.serverDir + sl[i]);
 			if(!stats.isDirectory()) continue;
-			this.serverlist[sl[i]] = new MinecraftServer(sl[i]);
+			this.serverList[sl[i]] = new MinecraftServer(this, sl[i]);
 		}
 	}
 	
-	initServer(serverName, version){
-		var server;
-		if(this.serverlist[serverName] != undefined) server = this.serverlist[serverName];
-		else server = new MinecraftServer(serverName);
-		server.initialize(version);
-		this.serverlist[serverName] = server;
-		return server.copyToJSONify();
-	}
-	
-	serverExists(serverName){
-		//short circuit to check if a server is undefined or null
-		return this.serverlist[serverName] && true;
-	}
-	
-	_executeCommandLower(command, args, callback){
-		if(command != "init" && command != "list" && command != "getversion" && !this.serverExists(args[0])) throw new Error("Server does not exist");
-		var error = "", output = null;
-		if(command == "list"){
-			//var temp = {};
-			output = {}
-			for(var prop in this.serverlist){
-				if(!this.serverlist.hasOwnProperty(prop)) continue;
-				output[prop] = this.serverlist[prop].copyToJSONify();
-			}
-			//output = temp;
-		} else if(command == "init"){
-			if(args.length != 2) error = "Invalid syntax: init servername version";
-			else output = this.initServer(args[0], args[1]);
-		} else if(command == "start"){
-			if(args.length != 1) error = "Invalid syntax: start servername";
-			else this.serverlist[args[0]].start(callback);
-		} else if(command == "listsettings"){
-			if(args.length != 1) error = "Invalid syntax: listsettings servername";
-			else this.serverlist[args[0]].listSettings();
-		} else if(command == "getversion"){
-			if(args.length != 1) error = "Invalid syntax: getversion version";
-			else getVersion(args[0], callback);
-		} else if(command == "stop"){
-			if(args.length != 1) error = "Invalid syntax: stop servername";
-			else output = this.serverlist[args[0]].stop();
-		} else if(command == "setproperty"){
-			if(args.length != 3) error = "Invalid syntax: stop servername";
-			else{
-				this.serverlist[args[0]].setProperty(args[1], args[2]);
-				output = this.serverlist[args[0]].copyToJSONify();
-			}
-		} else if(command == "saveproperties"){
-			if(args.length != 1) error = "Invalid syntax: listsettings servername";
-			else output = this.serverlist[args[0]].saveProperties();
-		} else error = "Unknown command: " + command;
-		if(error != "") throw new Error(error);
-		return output;
-	}
-	
-	executeCommand(command, args, callback){
-		try{
-			var output = this._executeCommandLower(command, args, callback);
-			if(callback && output) callback(output, null);
-		} catch(err){
-			if(callback) callback(null, err.message);
+	/**
+	 * These functions deal with making sure that rcon ports are 
+	 * unique among each server
+	 */
+	_isRconPortUsed(port){ return !!this.usedRconPorts[port]; }
+	_setRconPortUsed(port){ this.usedRconPorts[port] = true; }
+	_unsetRconPortUsed(port){ this.usedRconPorts[port] = false; }
+	_getFreeRconPort(){
+		var i = 0;
+		for(var i = this.startRconPort; i < this.endRconPort; i++){
+			if(this.usedRconPorts[i]) continue;
+			break;
 		}
+		if(i == this.endRconPort) throw new Error("No free Rcon port");
+		else return i;
+	}
+	
+	/**
+	 * These functions deal with making sure that server ports are 
+	 * unique among each server
+	 */
+	_isServerPortUsed(port){ return !!this.usedServerPorts[port]; }
+	_setServerPortUsed(port){ this.usedServerPorts[port] = true; }
+	_unsetServerPortUsed(port){ this.usedServerPorts[port] = false; }
+	_getFreeServerPort(){
+		var i = 0;
+		for(var i = this.startServerPort; i < this.endServerPort; i++){
+			if(this.usedServerPorts[i]) continue;
+			break;
+		}
+		if(i == this.endServerPort) throw new Error("No free Server port");
+		else return i;
 	}
 }
 
-function getVersionJar(url, version, callback){
-	var file = fs.createWriteStream("./jar_files/" + version + ".jar");
-	https.get(url, (resp) => {
-		resp.pipe(file);
-		//file.on('finish', () => file.close(() => console.log("Version " + version + " downloaded")));
-		file.on('finish', () => {
-			file.close(() => {
-				callback("Version " + version + " downloaded", null);
-			});
-		});
-	}).on('error', (err) => {
-		fs.unlink("./jar_files/" + version + ".jar");
-		callback(null, err);
-	});
-}
-
-function getVersion(version, callback){
-	var versionPage = "";
-	https.get('https://mcversions.net/', (resp) => {
-		const statusCode = resp.statusCode;
-		if (statusCode !== 200){
-			throw new Error("Request failed: " + statusCode);
-		}
-		resp.on('data', (chunk) => versionPage += chunk);
-		resp.on('end', () => {
-			var doc = new DOMParser({errorHandler: {warning:function(w){}}}).parseFromString(versionPage);
-			var topNode = doc.getElementById(version);
-			if(topNode){
-				var firstDiv = null;
-				var serverNode = null;
-				for(var i = 0; i < topNode.childNodes.length; i++){
-					var cur = topNode.childNodes[i];
-					if(cur.nodeName.toLowerCase() == "div"){ firstDiv = cur; break; }
-				}
-				for(var i = 0; i < firstDiv.childNodes.length; i++){
-					var cur = firstDiv.childNodes[i];
-					if(cur.attributes != null && cur.hasAttribute('class') && cur.getAttribute('class').includes("server")){
-						serverNode = cur;
-						break;
-					}
-				}
-				getVersionJar(serverNode.getAttribute("href"), version, callback);
-			} else throw new Error("Unknown version " + version);
-		});
-	});
-}
-
-module.exports = { MinecraftServer: MinecraftServer, MSMServer: MSMServer, getVersion: getVersion };
+module.exports = { MSMServer: MSMServer };
