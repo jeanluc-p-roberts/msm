@@ -21,11 +21,11 @@ const wss = new WebSocket.Server({server});
 
 wss.on('connection', (ws) => {
 	ws.on('message', (message) => {
-		var args = message.match(/\S+/g) || [];
-		if(args[0] == "exit"){
+		var m = JSON.parse(message);
+		if(m.command == "exit"){
 			process.exit(0);
 		} else{
-			msmserver.executeCommand(args[0], args.slice(1), (output, err) => {
+			msmserver.executeCommand(m.command, m.args, (output, err) => {
 				var toSend = { status: null, msg: null };
 				if(err){
 					toSend.status = "err";
