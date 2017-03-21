@@ -49,7 +49,12 @@ const rl = readline.createInterface({
 });
 
 rl.on('line', (input) => {
-	var args = input.match(/\S+/g) || [];
+	var args = input.match(/\".+\"|\'.+\'|\S+/g) || [];
+	for(var i = 0; i < args.length; i++){
+		if(args[i].startsWith("\"") || args[i].startsWith("'")){
+			args[i] = args[i].substring(1, args[i].length - 1);
+		}
+	}
 	if(args[0] == "exit"){
 		rl.close();
 		process.exit(0);
