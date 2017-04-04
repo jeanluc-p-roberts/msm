@@ -2,3 +2,4 @@ jar_files/*.jar
 node_modules/*/
 servers/*/*
 test_install/*
+.c9
