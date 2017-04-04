@@ -123,7 +123,7 @@ class MSMServer extends EventEmitter{
 			localConfDir: "./conf/",
 			serverDir: "./servers/",
 			jarDir: "./jar_files/"
-		}
+		};
 		
 		this._checkFoldersExist();
 		this._loadDefaultSettings();
@@ -209,7 +209,6 @@ class MSMServer extends EventEmitter{
 	_setRconPortUsed(port){ this.usedRconPorts[port] = true; }
 	_unsetRconPortUsed(port){ this.usedRconPorts[port] = false; }
 	_getFreeRconPort(){
-		var i = 0;
 		for(var i = this.startRconPort; i < this.endRconPort; i++){
 			if(this.usedRconPorts[i]) continue;
 			break;
@@ -226,7 +225,6 @@ class MSMServer extends EventEmitter{
 	_setServerPortUsed(port){ this.usedServerPorts[port] = true; }
 	_unsetServerPortUsed(port){ this.usedServerPorts[port] = false; }
 	_getFreeServerPort(){
-		var i = 0;
 		for(var i = this.startServerPort; i < this.endServerPort; i++){
 			if(this.usedServerPorts[i]) continue;
 			break;

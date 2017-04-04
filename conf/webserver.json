@@ -1,0 +1,5 @@
+{
+	"port": 8080,
+	"password": "potato123.",
+	"authenticateDelay": 5000
+}
