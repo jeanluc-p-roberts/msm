@@ -1,5 +1,8 @@
 # msm
 Minecraft Server Maintainer
+<<<<<<< HEAD
+Uses TextEncoder polyfill found at https://github.com/inexorabletash/text-encoding
+=======
 
 ## Third Party Licenses
 * ExpressJS: MIT License
@@ -12,3 +15,4 @@ Minecraft Server Maintainer
 * Font Awesome, Fonts: SIL OFL 1.1
 * Font Awesome, Code: MIT License
 * inexorabletash/text-encoding: Unlicense
+>>>>>>> origin/master
