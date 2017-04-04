@@ -82,7 +82,7 @@ class MSMClient{
 			var nonce = jsonMessage.nonce;
 			sha256(password).then((hashedPassword) => {
 				sha256(hashedPassword + nonce).then((digest) => {
-					cl.sendJSONMessage({messageID: 1234, command: "authenticate", password: digest, nonce: nonce}, callback);
+					cl.sendJSONMessage({command: "authenticate", password: digest, nonce: nonce}, callback);
 				});
 			});
 		});
