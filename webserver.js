@@ -35,23 +35,28 @@ class WebServer{
 		var webs = this;
 		this.wss = new WebSocket.Server({server});
 		this.wss.on('connection', (ws) => {
+			var broadcastFunc = function(jsonMessage){ ws.send(JSON.stringify(jsonMessage)); };
+			webs.msmserver.addListener('broadcast', broadcastFunc);
+			ws.on('close', () => { webs.msmserver.removeListener('broadcast', broadcastFunc) });
+			
 			ws.on('message', (message) => {
 				var jsonMessage = JSON.parse(message);
 				console.log(jsonMessage);
 				if(jsonMessage.command == "authenticate"){
 					ws.emit('authenticate', jsonMessage);
 				} else if(jsonMessage.command == "startauth") ws.emit('startauth', jsonMessage);
-				else ws.send(message);
+				else{ ws.emit('command', jsonMessage); /*ws.send(message);*/ }
 			}).on('authenticate', (jsonMessage) => {
 				var toSend = { messageID: jsonMessage.messageID };
 				if(webs.isPasswordValid(jsonMessage.password, jsonMessage.nonce)) toSend.status = "ok";
 				else toSend.status = "err";
 				setTimeout(ws.send.bind(ws, JSON.stringify(toSend)), webs.settings.authenticateDelay);
+				ws.authenticated = true;
 			}).on('startauth', (jsonMessage) => {
 				const buf = crypto.randomBytes(32);
 				var str = buf.toString("hex");
 				ws.send(JSON.stringify({messageID: jsonMessage.messageID, nonce: str}));
-			});
+			}).on('command', (jsonMessage) => { webs.command(ws, jsonMessage); });
 		});
 		this.server = server;
 	}
@@ -66,6 +71,38 @@ class WebServer{
 		hash.update(toCheckAgainst);
 		toCheckAgainst = hash.digest("hex");
 		return password == toCheckAgainst;
+	}
+	
+	command(ws, jsonMessage){
+		var webs = this;
+		var toSend = { command: jsonMessage.command, messageID: jsonMessage.messageID };
+		var sendMessage = true;
+		if(!ws.authenticated){
+			toSend.status = "err";
+			toSend.message = "Unauthenticated";
+		} else if(!jsonMessage.command){
+			toSend.status = "err";
+			toSend.message = "command must be set";
+		} else{
+			jsonMessage.status = "ok";
+			switch(jsonMessage.command){
+				case "serverinit":
+					if(!jsonMessage.serverName || !jsonMessage.version){
+						toSend.status = "err";
+						toSend.message = "Server name and version are required";
+					} else{
+						webs.msmserver.serverInit(jsonMessage.serverName, jsonMessage.version);
+						sendMessage = false;
+					}
+					break;
+				default:
+					toSend.status = "err";
+					toSend.message = "Unknown command";
+					break;
+			}
+		}
+		
+		if(sendMessage) ws.send(JSON.stringify(toSend));
 	}
 }
 
