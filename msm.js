@@ -2,6 +2,8 @@ const EventEmitter = require('events');
 const fs = require('fs');
 const readline = require('readline');
 const RCon = require('rcon').newHandle;
+const https = require('https');
+const DOMParser = require('xmldom').DOMParser;
 
 class MinecraftServer{
 	constructor(MSMServer, serverName){
@@ -139,28 +141,46 @@ class MSMServer extends EventEmitter{
 	}
 	
 	/**
-	 * Events
-	 *
-	 * getversion
-	 * serverstart
-	 * serverstop
-	 * serverproperty
-	 * serversave
-	 * serverinit
-	 * serverdelete
-	 */
+	  * Broadcast events are the following events:
+	  * 
+	  * serverstart
+	  * serverstop
+	  * serverinit
+	  * serverdelete
+	  * 
+	  * These events are asynchronous and every client should get them, so they
+	  * are broadcast events.
+	  */
 	
-	getVersion(){}
+	_broadcast(status, event, serverName, message){
+		var toSend = {
+			broadcast: true,
+			status: status,
+			event: event,
+			serverName: serverName,
+			message: message
+		};
+		this.emit('broadcast', toSend);
+	}
+	
 	serverInit(serverName, version){
 		if(this.serverList[serverName])
-			this.emit('serverinit', "err", "Server " + serverName + " already exists!");
-		if(!this._checkVersionExists(version))
-			this.emit('serverinit', "err", "Version " + version + " is not in the system!");
+			this._broadcast("err", "serverinit", serverName, "Server " + serverName + " already exists!");
+		else if(!this._checkVersionExists(version)){
+			this._getVersion(version, this._createServer.bind(this, serverName, version));
+		} else this._createServer(serverName, version, true);
+	}
+	
+	_createServer(serverName, version, success, err){
+		if(!success){
+			this._broadcast("err", "serverinit", serverName, err);
+			return;
+		}
 		var ms = new MinecraftServer(this, serverName);
-		ms.setServerJar(this.jarDir + version + ".jar");
+		ms.setServerJar(this.directories.jarDir + version + ".jar");
 		ms.setEULA();
 		this.serverList[serverName] = ms;
-		this.emit('serverinit', "ok", ms.makeJSONCopy());
+		this._broadcast("ok", "serverinit", serverName, "ok");
 	}
 	
 	_checkFoldersExist(){
@@ -231,6 +251,80 @@ class MSMServer extends EventEmitter{
 		}
 		if(i == this.endServerPort) throw new Error("No free Server port");
 		else return i;
+	}
+	
+	/**
+	 * This function checks to see if a requested version has a download link, then
+	 * calls getVersionJar with that download link.
+	 */
+	_getVersion(version, callback){
+		var current_msms = this;
+		var versionPage = "";
+		//Query the main page for mcversions to get the list of versions
+		https.get('https://mcversions.net/', (resp) => {
+			const statusCode = resp.statusCode;
+			//If unable to connect to site
+			if (statusCode !== 200){
+				callback(false, "Request failed: " + statusCode);
+			}
+			//Get data
+			resp.on('data', (chunk) => versionPage += chunk);
+			//All data received
+			resp.on('end', () => {
+				//Create a parser to go through the page
+				var doc = new DOMParser({errorHandler: {warning:function(w){}}}).parseFromString(versionPage);
+				//Get the node for the version requested
+				var topNode = doc.getElementById(version);
+				if(topNode){
+					//Iterate over the nodes to find the server version.
+					//TODO: This is fragile, as if the site changes their layout,
+					//this would break.
+					var firstDiv = null;
+					var serverNode = null;
+					for(var i = 0; i < topNode.childNodes.length; i++){
+						var cur = topNode.childNodes[i];
+						if(cur.nodeName.toLowerCase() == "div"){ firstDiv = cur; break; }
+					}
+					for(var i = 0; i < firstDiv.childNodes.length; i++){
+						var cur = firstDiv.childNodes[i];
+						if(cur.attributes != null && cur.hasAttribute('class') && cur.getAttribute('class').includes("server")){
+							serverNode = cur;
+							break;
+						}
+					}
+					//Call the jar downloader
+					current_msms._getVersionJar(serverNode.getAttribute("href"), version, callback);
+				} else{
+					//Version is not listed
+					callback(false, "Unknown version " + version);
+				}
+			});
+		});
+	}
+	
+	/**
+	 * This function downloads a jar file from the givven URL
+	 */
+	_getVersionJar(url, version, callback){
+		//Open the file on the drive
+		//TODO: Don't hardcode this
+		var current_msms = this;
+		var file = fs.createWriteStream(current_msms.directories.jarDir + version + ".jar");
+		https.get(url, (resp) => {
+			//If there is a response, pipe the file to the drive
+			resp.pipe(file);
+			file.on('finish', () => {
+				//Close the file on finish, and call the callback
+				file.close(() => {
+					callback(true);
+				});
+			});
+		}).on('error', (err) => {
+			//If there is an error, delete the file on the disk and call callback
+			//TODO: Don't hardcode this
+			fs.unlink(current_msms.directories.jarDir + version + ".jar");
+			callback(false, err);
+		});
 	}
 }
 
