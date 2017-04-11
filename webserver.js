@@ -51,8 +51,12 @@ class WebServer{
 				var toSend = { messageID: jsonMessage.messageID };
 				if(webs.isPasswordValid(jsonMessage.password, jsonMessage.nonce)) toSend.status = "ok";
 				else toSend.status = "err";
-				setTimeout(ws.send.bind(ws, JSON.stringify(toSend)), webs.settings.authenticateDelay);
-				ws.authenticated = true;
+				//setTimeout(ws.send.bind(ws, JSON.stringify(toSend)), webs.settings.authenticateDelay);
+				//ws.authenticated = true;
+				setTimeout(() => {
+					ws.send(JSON.stringify(toSend));
+					ws.authenticated = true;
+				}, webs.settings.authenticateDelay);
 			}).on('startauth', (jsonMessage) => {
 				const buf = crypto.randomBytes(32);
 				var str = buf.toString("hex");

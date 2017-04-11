@@ -31,6 +31,7 @@ function getMainPage(){
 		result = result.firstChild.childNodes[1].firstChild;
 		var body = document.getElementsByTagName('body')[0];
 		body.appendChild(result);
+		setServerList();
 	});
 }
 
