@@ -15,13 +15,23 @@ class MinecraftServer{
 		this.settings = {};
 		this.loadSettings();
 		this.jarPath = "";
+		this.version = ""
 	}
 	
 	setServerJar(jarPath){
 		var serverJar = this.path + "server.jar";
+		this.jarPath = jarPath;
 		if(fs.existsSync(serverJar))
 			fs.unlinkSync(serverJar);
 		fs.symlinkSync(jarPath, serverJar);
+	}
+	
+	_getJarPath(){
+		if(this.jarPath != "") return;
+		var serverJar = this.path + "server.jar";
+		if(fs.existsSync(serverJar)){
+			this.jarPath = fs.readlinkSync(serverJar);
+		}
 	}
 	
 	setEULA(){ fs.writeFileSync(this.path + "eula.txt", "eula=true\n"); }
@@ -51,22 +61,18 @@ class MinecraftServer{
 		};
 	}
 	
-	setProperty(key, value, bypassRunningCheck, dontEmit){
-		//May change this check in the future to allow these to be modified
-		if(!bypassRunningCheck && (key == "rcon.port" || key == "rcon.password" || key == "query.port" || key == "server-port")){
-			if(!!dontEmit) this.MSMServer.emit('serverproperty', "err", "Cannot modify " + key);
-			return;
+	//TODO: Add in error checking for property types
+	setProperty(key, value, bypassChecks){
+		if(!bypassChecks && (key == "rcon.port" || key == "rcon.password" || key == "query.port" || key == "server-port")){
+			return { setProperty: false, message: "Cannot modify" + key };
 		}
-		if(bypassRunningCheck || !this.isRunning()){
+		if(bypassChecks || !this.isRunning()){
 			if(value == "true") value = true;
 			else if(value == "false") value = false;
-			else if(!isNaN(value) && value != "") value = parseInt(value);
+			else if(!isNaN(value) && value != "" && typeof value === 'string') value = parseInt(value);
 			this.settings[key] = value;
-			if(!!dontEmit)
-				this.MSMServer.emit('serverproperty', "ok",
-					{ serverName: this.serverName, key: key, value: value});
-		} else if(!!dontEmit)
-			this.MSMServer.emit('serverproperty', "err", "Cannot modify properties while running");
+			return { setProperty: true };
+		} else return { setProperty: false, message: "Cannot modify properties while running" };
 	}
 	
 	_parseSettingsFile(){
@@ -82,7 +88,7 @@ class MinecraftServer{
 			var settingValue = "";
 			firstEnd++;
 			if(firstEnd != line.length) settingValue = line.substring(firstEnd);
-			ms.setProperty(settingKey, settingValue, true, true);
+			ms.setProperty(settingKey, settingValue, true);
 		}).on('close', () => {
 			//Check to make sure there are no port conflicts after loading
 			//properties
@@ -113,6 +119,20 @@ class MinecraftServer{
 			this.settings["server-port"] = this.MSMServer._getFreeServerPort();
 		this.MSMServer._setServerPortUsed(this.settings["server-port"]);
 		this.settings["query.port"] = this.settings["server-port"];
+	}
+	
+	getVersion(){
+		if(this.version == ""){
+			this._getJarPath();
+			if(this.jarPath == "") this.version = "unknown";
+			else {var regex = /(?:.*\/)*(.*?)\.jar/;
+				var result = regex.match(this.jarPath);
+				if(result && result.length == 2){
+					this.version = result[1];
+				} else this.version = "unknown"
+			}
+		}
+		return this.version;
 	}
 }
 
@@ -181,6 +201,42 @@ class MSMServer extends EventEmitter{
 		ms.setEULA();
 		this.serverList[serverName] = ms;
 		this._broadcast("ok", "serverinit", serverName, "ok");
+	}
+	
+	setProperties(serverName, properties){
+		var ms = this.serverList[serverName];
+		if(!ms){
+			return { status: "err", message: "Unknown server" };
+		}
+		var success = true;
+		var backup = ms.settings;
+		var ret = null;
+		for(var key in properties){
+			if(!properties.hasOwnProperty(key)) continue;
+			ret = ms.setProperty(key, properties[key]);
+			if(!ret.setProperty){ success = false; break; }
+		}
+		if(!success){
+			ms.settings = backup;
+			return { status: "err", message: ret.message };
+		} else{
+			ms._saveSettingsFile();
+			return { status: "ok", message: "ok" };
+		}
+	}
+	
+	listServers(){
+		var listOfServers = [];
+		for(var prop in this.serverList){
+			if(!this.serverList.hasOwnProperty(prop)) continue;
+			var s = this.serverList[prop];
+			var serv = {};
+			serv.serverName = s.serverName;
+			serv.version = s.getVersion();
+			serv.running = s.isRunning();
+			listOfServers.push(serv);
+		}
+		return listOfServers;
 	}
 	
 	_checkFoldersExist(){

@@ -84,7 +84,7 @@ class WebServer{
 			toSend.status = "err";
 			toSend.message = "command must be set";
 		} else{
-			jsonMessage.status = "ok";
+			toSend.status = "ok";
 			switch(jsonMessage.command){
 				case "serverinit":
 					if(!jsonMessage.serverName || !jsonMessage.version){
@@ -94,6 +94,18 @@ class WebServer{
 						webs.msmserver.serverInit(jsonMessage.serverName, jsonMessage.version);
 						sendMessage = false;
 					}
+					break;
+				case "setproperties":
+					if(!jsonMessage.properties || !jsonMessage.serverName){
+						toSend.status = "err";
+						toSend.message = "Must send server name and list of properties to set";
+						break;
+					}
+					var ret = webs.msmserver.setProperties(jsonMessage.serverName, jsonMessage.properties);
+					toSend.status = ret.status; toSend.message = ret.message;
+					break;
+				case "listservers":
+					toSend.listOfServers = webs.msmserver.listServers();
 					break;
 				default:
 					toSend.status = "err";
