@@ -1,8 +1,4 @@
 #!/bin/bash
-if [ ! -d "node_modules" ]; then
-	echo 'Installing package...'
-	npm install
-fi
 rm -f public/bootstrap
 if [ ! -d "bootstrap" ]; then
 	echo 'Downloading Bootstrap...'

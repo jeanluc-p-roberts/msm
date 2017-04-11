@@ -20,5 +20,8 @@
   "optionalDependencies": {
     "bufferutil": "^3.0.0",
     "utf-8-validate": "^3.0.1"
+  },
+  "scripts": {
+      "postinstall": "./setup.sh"
   }
 }
