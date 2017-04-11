@@ -1,0 +1,15 @@
+<div id="main" hidden=true class="container-fluid-full">
+	<nav><h1>testing</h1></nav>
+	<div class="row-fill" hidden=true>
+		<nav class="col-sm-3 col-md-2 bg-faded sidebar">
+			<ul class="nav nav-pills flex-column" id="serverList">
+				<li class="nav-item">
+					<a class="nav-link" href="#">Testing 1</a>
+				</li>
+			</ul>
+		</nav>
+		<main class="col-sm-9 col-md-10">
+			<h1>Hello, world!</h1>
+		</main>
+	</div>
+</div>

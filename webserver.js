@@ -7,6 +7,7 @@ const crypto = require('crypto');
 class WebServer{
 	constructor(msmserver){
 		this.msmserver = msmserver;
+		this.publicFolder = __dirname + "/public";
 		
 		//Get settings
 		var settingsFile = msmserver._getConfigFileName("webserver.json");
@@ -25,7 +26,7 @@ class WebServer{
 		
 		//Set up ExpressJS for static processing (everything will be done over websockets)
 		this.expressjs_app = express();
-		this.expressjs_app.use('/web', express.static(__dirname + "/public"));
+		this.expressjs_app.use('/web', express.static(this.publicFolder));
 		this.expressjs_app.get('/', (req, res) => {
 			res.redirect('/web/');
 		});
@@ -107,6 +108,20 @@ class WebServer{
 				case "listservers":
 					toSend.listOfServers = webs.msmserver.listServers();
 					break;
+				case "getfragment":
+					if(!jsonMessage.fragmentName){
+						toSend.status = "err";
+						toSend.message = "Fragment name is needed";
+						break;
+					}
+					var res = webs.loadFragment(jsonMessage.fragmentName);
+					if(!res){
+						toSend.status = "err";
+						toSend.message = "Fragment not found";
+						break;
+					}
+					toSend.fragment = res;
+					break;
 				default:
 					toSend.status = "err";
 					toSend.message = "Unknown command";
@@ -115,6 +130,12 @@ class WebServer{
 		}
 		
 		if(sendMessage) ws.send(JSON.stringify(toSend));
+	}
+	
+	loadFragment(fragmentName){
+		var fn = this.publicFolder + "/" + fragmentName + ".fragment";
+		if(!fs.existsSync(fn)) return null;
+		else return fs.readFileSync(fn, {encoding: "utf8"});
 	}
 }
 

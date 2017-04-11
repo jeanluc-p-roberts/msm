@@ -20,10 +20,11 @@ class MinecraftServer{
 	
 	setServerJar(jarPath){
 		var serverJar = this.path + "server.jar";
-		this.jarPath = jarPath;
+		this.jarPath = process.cwd() + "/" + jarPath;
 		if(fs.existsSync(serverJar))
 			fs.unlinkSync(serverJar);
-		fs.symlinkSync(jarPath, serverJar);
+		//fs.symlinkSync(jarPath, serverJar);
+		fs.symlinkSync(this.jarPath, serverJar);
 	}
 	
 	_getJarPath(){
@@ -125,11 +126,13 @@ class MinecraftServer{
 		if(this.version == ""){
 			this._getJarPath();
 			if(this.jarPath == "") this.version = "unknown";
-			else {var regex = /(?:.*\/)*(.*?)\.jar/;
-				var result = regex.match(this.jarPath);
+			else {
+				var regex = /(?:.*\/)*(.*?)\.jar/;
+				//var result = regex.match(this.jarPath);
+				var result = regex.exec(this.jarPath);
 				if(result && result.length == 2){
 					this.version = result[1];
-				} else this.version = "unknown"
+				} else this.version = "unknown";
 			}
 		}
 		return this.version;

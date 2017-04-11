@@ -1,0 +1,24 @@
+// This is to make the document full screen height.
+html,body{
+	height: 100%;
+}
+
+// This allows the main body to extend the size of the screen
+.row-fill{
+	@extend .row;
+	@extend .d-flex;
+	flex: 1;
+}
+
+// This allows the main body to extend the size of the screen
+.container-fluid-full{
+	@extend .container-fluid;
+	@extend .d-flex;
+	@extend .h-100;
+	@extend .flex-column;
+}
+
+//Make nav links active on hover over
+.nav-link:hover{
+	@extend .active;
+}
